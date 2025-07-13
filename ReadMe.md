@@ -7,7 +7,7 @@
 ## 功能特点
 
 - 在输入中文时，通过特定触发方式获取候选词的英文翻译
-- 支持多种翻译 API：Google、DeepL、Microsoft、DeepLX、小牛云翻译、大模型（❎暂不支持，计划中）
+- 支持多种翻译 API：Google、DeepL、Microsoft、小牛云翻译、有道翻译、百度翻译（测试中）
 - 翻译结果显示在候选词列表的首位
 - 简洁的界面，翻译结果前只显示`[译]`标记
 
@@ -55,23 +55,28 @@ engine:
 所有配置都在 `lua/trans-all.lua` 文件的开头部分：
 
 ```lua
+-- 翻译API配置
 local config = {
-    -- 选择使用的翻译API: "google", "deepl", "microsoft", "deeplx", "niutrans"
-    default_api = "deeplx",
+    -- 选择使用的翻译API: "google", "deepl", "microsoft", "deeplx", "niutrans", "youdao", "baidu" 
+    default_api = "niutrans",
     
     -- API密钥配置
     api_keys = {
-        deepl = "YOUR_DEEPL_API_KEY", -- 替换为您的DeepL API密钥
+        deepl = "YOUR_DEEPL_API_KEY", -- DeepL API密钥
         microsoft = {
-            key = "YOUR_MS_TRANSLATOR_API_KEY", -- 替换为您的Microsoft Translator API密钥
+            key = "YOUR_MS_TRANSLATOR_API_KEY", -- Microsoft Translator API密钥
             region = "global" -- 替换为您的区域
         },
-        niutrans = "YOUR_NIUTRANS_API_KEY" -- 替换为您的小牛云翻译API密钥
-    },
-    
-    -- DeepLX服务器地址
-    deeplx_url = "YOUR_DEEPLX_URL",
-    deeplx_token = nil,
+        niutrans = "YOUR_NIUTRANS_API_KEY", -- 小牛云翻译API密钥
+        youdao = {
+            app_id = "YOUR_YOUDAO_APP_ID", -- 有道翻译应用ID
+            app_key = "YOUR_YOUDAO_APP_KEY" -- 有道翻译应用密钥
+        },
+        baidu = {
+            app_id = "YOUR_BAIDU_APP_ID", -- 百度翻译应用ID
+            app_key = "YOUR_BAIDU_APP_KEY" -- 百度翻译应用密钥
+        }
+    }
 }
 ```
 
@@ -83,26 +88,19 @@ local config = {
 - `google` - Google 翻译（默认，无需 API 密钥）
 - `deepl` - DeepL 翻译（需要 API 密钥）
 - `microsoft` - Microsoft 翻译（需要 API 密钥）
-- `deeplx` - DeepLX 翻译（需要服务器地址）
 - `niutrans` - 小牛云翻译（需要 API 密钥）
+- `youdao` - 有道翻译
+- `baidu` - 百度翻译
 
 ### 配置 API 密钥
 
 如果您选择使用需要 API 密钥的翻译服务，需要在配置中填写相应的 API 密钥。
 
-### DeepLX 配置
+### ~~DeepLX 配置~~
 
-DeepLX 是一个开源的 DeepL API 代理，可以免费使用。如果您选择使用 DeepLX，需要配置服务器地址：
+~~DeepLX 是一个开源的 DeepL API 代理，可以免费使用。如果您选择使用 DeepLX，需要配置服务器地址：~~
 
-```lua
-deeplx_url = "https://xxx.xxx.xxx/translate",
-```
-
-如果服务器需要认证，还需要设置令牌：
-
-```lua
-deeplx_token = "your_token",
-```
+~~如果服务器需要认证，还需要设置令牌：~~
 
 ## 调试
 
@@ -123,7 +121,6 @@ log.error("输出错误信息……")
 如果翻译功能不工作，请检查以下几点：
 
 1. 确保您的网络连接正常
-2. 如果使用 DeepLX，确保服务器地址正确且可访问
 3. 如果使用需要 API 密钥的翻译服务，确保 API 密钥正确
 4. 重新部署 Rime 输入法
 

@@ -9,10 +9,12 @@ local function trans(text)
         result = translation.deepl(text)
     elseif translation.config.default_api == "microsoft" then
         result = translation.microsoft(text)
-    elseif translation.config.default_api == "deeplx" then
-        result = translation.deeplx(text)
     elseif translation.config.default_api == "niutrans" then
         result = translation.niutrans(text)
+    elseif translation.config.default_api == "youdao" then
+        result = translation.youdao(text)
+    elseif translation.config.default_api == "baidu" then
+        result = translation.baidu(text)
     else
         result = translation.google(text)
     end

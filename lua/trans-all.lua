@@ -1,26 +1,31 @@
--- local log = require("log")  日志方法
+-- local log = require("log")
 local http = require("simplehttp")
 local json = require("json")
+local sha = require("sha2")
 
 -- 翻译API配置
 local config = {
-    -- 选择使用的翻译API: "google", "deepl", "microsoft", "deeplx", "niutrans"
-    default_api = "deeplx",
-    
+    -- 选择使用的翻译API: "google", "deepl", "microsoft", "deeplx", "niutrans", "youdao", "baidu" 
+    -- 百度翻译暂时不可用，请勿使用
+    default_api = "google",
+
     -- API密钥配置
     api_keys = {
-        deepl = "YOUR_DEEPL_API_KEY", -- 替换为您的DeepL API密钥
+        deepl = "YOUR_DEEPL_API_KEY", -- DeepL API密钥
         microsoft = {
-            key = "YOUR_MS_TRANSLATOR_API_KEY", -- 替换为您的Microsoft Translator API密钥
+            key = "YOUR_MS_TRANSLATOR_API_KEY", -- Microsoft Translator API密钥
             region = "global" -- 替换为您的区域
         },
-        niutrans = "" -- 替换为您的小牛云翻译API密钥
-    },
-    
-    -- DeepLX服务器地址
-    -- 请选择一个可用的服务器并取消注释，或者添加您自己的服务器
-    deeplx_url = "",
-    deeplx_token = nil,
+        niutrans = "YOUR_NIUTRANS_API_KEY", -- 小牛云翻译API密钥
+        youdao = {
+            app_id = "YOUR_YOUDAO_APP_ID", -- 有道翻译应用ID
+            app_key = "YOUR_YOUDAO_APP_KEY" -- 有道翻译应用密钥
+        },
+        baidu = {
+            app_id = "YOUR_BAIDU_APP_ID", -- 百度翻译应用ID
+            app_key = "YOUR_BAIDU_APP_KEY" -- 百度翻译应用密钥
+        }
+    }
 }
 
 -- URL编码函数
@@ -137,88 +142,6 @@ local function microsoft(text)
     return nil
 end
 
--- DeepLX翻译API
-local function deeplx(text)
-    local url = config.deeplx_url
-    
-    if not url or url == "" then
-        log.error("DeepLX URL未配置")
-        return nil
-    end
-    
-    if type(text) ~= "string" then
-        text = tostring(text)
-    end
-    
-    local body_table = {
-        text = text,
-        source_lang = "ZH", 
-        target_lang = "EN"
-    }
-    
-    local success_encode, body = pcall(json.encode, body_table)
-    if not success_encode then
-        log.error("JSON编码失败: " .. tostring(body))
-        return nil
-    end
-    
-    local headers = {
-        ["Content-Type"] = "application/json"
-    }
-    
-    if config.deeplx_token then
-        headers["Authorization"] = "Bearer " .. config.deeplx_token
-    end
-    
-    log.info("发送POST请求到: " .. url)
-    log.info("请求体: " .. body)
-    
-    local success_request, reply = pcall(function()
-        return http.request{
-            url = url,
-            method = "POST",
-            headers = headers,
-            data = body
-        }
-    end)
-    
-    if not success_request then
-        log.error("HTTP请求失败: " .. tostring(reply))
-        return nil
-    end
-    
-    if not reply or reply == "" then
-        log.error("收到空响应")
-        return nil
-    end
-    
-    log.info("收到响应: " .. reply)
-    
-    local success_decode, j = pcall(json.decode, reply)
-    
-    if not success_decode then
-        log.error("JSON解析失败: " .. tostring(j))
-        return nil
-    end
-    
-    if j and j.data then
-        log.info("找到data字段: " .. tostring(j.data))
-        return j.data
-    elseif j and j.alternatives and j.alternatives[1] then
-        log.info("找到alternatives字段: " .. tostring(j.alternatives[1]))
-        return j.alternatives[1]
-    elseif j and j.translation then
-        log.info("找到translation字段: " .. tostring(j.translation))
-        return j.translation
-    elseif j and j.translatedText then
-        log.info("找到translatedText字段: " .. tostring(j.translatedText))
-        return j.translatedText
-    end
-    
-    log.error("未找到有效的翻译结果")
-    return nil
-end
-
 -- 小牛云翻译API
 local function niutrans(text)
     local api_key = config.api_keys.niutrans
@@ -286,12 +209,137 @@ local function niutrans(text)
     end
 end
 
+-- 有道翻译API
+local function youdao(text)
+    local app_id = config.api_keys.youdao.app_id
+    local app_key = config.api_keys.youdao.app_key
+    
+    if not app_id or not app_key then
+        log.error("有道API密钥未配置")
+        return nil
+    end
+    
+    local salt = tostring(math.random(32768, 65536))
+    local curtime = tostring(os.time())
+    local function get_input(q)
+        if #q <= 20 then return q end
+        return q:sub(1,10) .. tostring(#q) .. q:sub(-10)
+    end
+    local input = get_input(text)
+    local sign_str = app_id .. input .. salt .. curtime .. app_key
+    local sign = sha.sha256(sign_str)
+    
+    local url = "https://openapi.youdao.com/api"
+    local body = "q=" .. url_encode(text)
+        .. "&from=zh-CHS&to=en"
+        .. "&appKey=" .. app_id
+        .. "&salt=" .. salt
+        .. "&sign=" .. sign
+        .. "&signType=v3"
+        .. "&curtime=" .. curtime
+    
+    local headers = {
+        ["Content-Type"] = "application/x-www-form-urlencoded"
+    }
+    
+    log.info("有道翻译请求URL: " .. url)
+    log.info("有道翻译请求体: " .. body)
+    
+    local reply = http.request{
+        url = url,
+        method = "POST",
+        headers = headers,
+        data = body
+    }
+    
+    if not reply or reply == "" then
+        log.error("有道翻译收到空响应")
+        return nil
+    end
+    
+    log.info("有道翻译响应: " .. reply)
+    
+    local success, j = pcall(json.decode, reply)
+    if not success then
+        log.error("有道翻译JSON解析失败: " .. tostring(j))
+        return nil
+    end
+    
+    if j and j.translation and j.translation[1] then
+        log.info("有道翻译结果: " .. tostring(j.translation[1]))
+        return j.translation[1]
+    elseif j and j.basic and j.basic.explains and j.basic.explains[1] then
+        log.info("有道翻译basic.explains: " .. tostring(j.basic.explains[1]))
+        return j.basic.explains[1]
+    else
+        log.error("有道翻译未找到有效结果")
+        return nil
+    end
+end
+
+-- 百度翻译API
+local function baidu(text)
+    local app_id = config.api_keys.baidu.app_id
+    local app_key = config.api_keys.baidu.app_key
+    
+    if not app_id or not app_key then
+        log.error("百度API密钥未配置")
+        return nil
+    end
+    
+    local salt = tostring(math.random(32768, 65536))
+    local sign = sha.md5(app_id .. text .. salt .. app_key):lower()
+    
+    local url = "https://fanyi-api.baidu.com/api/trans/vip/translate"
+    local body = "q=" .. url_encode(text)
+        .. "&from=zh&to=en"
+        .. "&appid=" .. app_id
+        .. "&salt=" .. salt
+        .. "&sign=" .. sign
+    
+    local headers = {
+        ["Content-Type"] = "application/x-www-form-urlencoded"
+    }
+    
+    log.info("百度翻译请求URL: " .. url)
+    log.info("百度翻译请求体: " .. body)
+    
+    local reply = http.request{
+        url = url,
+        method = "POST",
+        headers = headers,
+        data = body
+    }
+    
+    if not reply or reply == "" then
+        log.error("百度翻译收到空响应")
+        return nil
+    end
+    
+    log.info("百度翻译响应: " .. reply)
+    
+    local success, j = pcall(json.decode, reply)
+    if not success then
+        log.error("百度翻译JSON解析失败: " .. tostring(j))
+        return nil
+    end
+    
+    if j and j.trans_result and j.trans_result[1] and j.trans_result[1].dst then
+        log.info("百度翻译结果: " .. tostring(j.trans_result[1].dst))
+        return j.trans_result[1].dst
+    else
+        log.error("百度翻译未找到有效结果")
+        return nil
+    end
+end
+
 -- 导出模块
 return {
     google = google,
     deepl = deepl,
     microsoft = microsoft,
-    deeplx = deeplx,
     niutrans = niutrans,
+    youdao = youdao,
+    baidu = baidu,
     config = config
 }

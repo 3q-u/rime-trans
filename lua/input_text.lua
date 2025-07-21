@@ -27,9 +27,79 @@ local function is_chinese_character(char)
     return code >= 0x4E00 and code <= 0x9FFF
 end
 
-local function filter(input, env)
-    local input_text = env.engine.context.input
+-- 处理器模块
+local processor = {}
 
+-- 按键处理函数
+function processor.func(key_event, env)
+    local context = env.engine.context
+    
+    -- 检查是否是配置的快捷键（这里使用 Control+y 作为默认快捷键）
+    if key_event:repr() == "Control+y" then
+        -- 获取当前选中的候选词
+        local selected_candidate = context:get_selected_candidate()
+        if selected_candidate then
+            -- 记录高亮候选项到全局状态
+            context:set_property("translation_highlighted", selected_candidate.text)
+        end
+        
+        -- 设置全局触发标志
+        context:set_property("translation_triggered", "1")
+        
+        -- 刷新输入上下文以触发过滤器
+        context:refresh_non_confirmed_composition()
+        return 1  -- kAccepted: 消费按键
+    end
+    
+    return 2  -- kNoop: 不消费按键，继续处理
+end
+
+-- 过滤器模块
+local filter = {}
+
+-- 主过滤器函数
+function filter.func(input, env)
+    local context = env.engine.context
+    local input_text = context.input
+
+    -- 模式1：快捷键触发模式
+    local triggered = context:get_property("translation_triggered") == "1"
+    if triggered then
+        context:set_property("translation_triggered", "")  -- 重置标志
+        
+        -- 获取高亮候选项
+        local highlighted = context:get_property("translation_highlighted") or ""
+        context:set_property("translation_highlighted", "")  -- 重置
+        
+        if highlighted == "" then
+            yield(Candidate("error", 0, 0, "[无高亮候选项]", "请先高亮候选词"))
+            for cand in input:iter() do yield(cand) end
+            return
+        end
+        
+        -- 执行翻译
+        local translated_text = trans(highlighted)
+        
+        if not translated_text then
+            yield(Candidate("error", 0, #input_text, "[翻译失败]", "请检查网络或API配置"))
+            
+            for cand in input:iter() do
+                yield(cand)
+            end
+            return
+        end
+        
+        -- 产生翻译候选词
+        yield(Candidate("translation", 0, #input_text, translated_text, "[译] "..highlighted))
+        
+        -- 继续输出原始候选词
+        for cand in input:iter() do
+            yield(cand)
+        end
+        return
+    end
+
+    -- 模式2：后缀触发模式
     if input_text:sub(-2) == "''" then
         local raw_input = {}
         local count = 0
@@ -89,4 +159,13 @@ local function filter(input, env)
     end
 end
 
-return filter
+-- 清理函数
+function filter.fini(env)
+    -- 清理全局状态
+    local ctx = env.engine.context
+    ctx:set_property("translation_triggered", "")
+    ctx:set_property("translation_highlighted", "")
+end
+
+-- 返回模块
+return { processor = processor, filter = filter }

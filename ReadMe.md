@@ -1,54 +1,66 @@
 # Rime 候选词翻译插件
 
-这是一个为 Rime 输入法设计的候选词翻译插件，可以在输入中文时快速获取英文翻译。
+这是一个为 Rime 输入法设计的候选词翻译插件，可以在输入中文时快速获取英文翻译。通过简单的快捷键或特定触发方式，即可实时翻译当前输入的中文词语，提高双语输入效率。
 
-
+![468703772-a35610b6-6e5b-453e-b763-ab2462686458.gif](https://s2.loli.net/2025/07/30/XfBvJG8AnitK9Fh.gif)
 
 ## 功能特点
 
-- 在输入中文时，通过特定触发方式获取候选词的英文翻译
-- 支持多种翻译 API：Google、DeepL、Microsoft、小牛云翻译、有道翻译、百度翻译（测试中）
-- 翻译结果显示在候选词列表的首位
-- 简洁的界面，翻译结果前只显示`[译]`标记
+- **多种触发方式**：
+  - 快捷键触发（默认 Ctrl+Y）：选中候选词后按下快捷键获取翻译（默认第一个候选词）
+  - 后缀触发：输入两个单引号(`''`)自动翻译第一个候选词（不可选择候选词）
+- **多种翻译 API 支持**：
+  - Google 翻译（默认，无需 API 密钥）
+  - DeepL 翻译（需要 API 密钥）
+  - Microsoft 翻译（需要 API 密钥）
+  - 小牛云翻译（需要 API 密钥）
+  - 有道翻译（需要 API 密钥）
+  - 百度翻译（需要 API 密钥）
+- **简洁的界面**：翻译结果显示在候选词列表首位，前缀标记为`[译]`
+- **完整的日志记录**：方便调试和问题排查
 
 ## 安装方法
 
 1. 确保您已经安装了 Rime 输入法
-2. 获取[Github Releases](https://github.com/3q-u/rime-trans/releases)
-3. 将 `lua` 目录复制到您的 Rime **用户配置**目录中（默认位置）：
-   - Windows: `%APPDATA%\Rime`
-   - macOS: `~/Library/Rime`
-   - Linux: `~/.config/rime`
-4. - Windows 平台（小狼毫 >= 0.14.0）
-     - 将 `out-mingw` 下所有文件复制到小狼毫的**程序**文件夹下
-     - 将 `lua` 下所有文件复制到小狼毫的**用户目录**下
-   - Linux 平台（librime 需编译 lua 支持）
-     - 将 `out-linux` 下所有文件复制到 `/usr/local/lib/lua/$LUAV` 下
-     - 将 `lua` 下所有文件复制到**用户目录**下
-   - macOS 平台（小企鹅）
-     - 将 `out-macos` 下所有文件复制到 `/usr/local/lib/lua/$LUAV` 下
-     - 将 `lua` 下所有文件复制到 `~/.local/share/fcitx5/rime` 下
-5. 在您的输入方案配置文件（如 `<方案名>.schema.yaml`）中添加以下内容：
+2. 从 [GitHub Releases](https://github.com/3q-u/rime-trans/releases) 下载最新版本
+3. 根据您的操作系统，按照以下步骤安装：
+
+### Windows (小狼毫 >= 0.14.0)
+- 将 `out-mingw` 下所有文件复制到小狼毫的**程序**文件夹下
+- 将 `lua` 下所有文件复制到小狼毫的**用户目录**下 (`%APPDATA%\Rime`)
+
+### Linux
+- 确保 librime 已编译 lua 支持
+- 将 `out-linux` 下所有文件复制到 `/usr/local/lib/lua/$LUAV` 下
+- 将 `lua` 下所有文件复制到**用户目录**下 (`~/.config/rime`)
+
+### macOS (小企鹅)
+- 将 `out-macos` 下所有文件复制到 `/usr/local/lib/lua/$LUAV` 下
+- 将 `lua` 下所有文件复制到 `~/.local/share/fcitx5/rime` 下
+
+4. 在您的输入方案配置文件（如 `<方案名>.schema.yaml`）中添加以下内容：
 
 ```yaml
 engine:
+  processors:
+    - lua_processor@*input_text*processor # 候选词翻译
   filters:
-    - lua_filter@*input_text   # 候选词翻译
+    - lua_filter@*input_text*filter   # 候选词翻译
 ```
 
-4. 重新部署 Rime 输入法
+5. 重新部署 Rime 输入法
 
 ## 使用方法
 
-1. 在 Rime 输入法中输入中文
-2. 在输入的末尾添加 `''`（两个单引号）
-3. 系统会自动翻译第一个候选词，并将翻译结果放在候选词列表的最前面
-4. 翻译结果前会显示"[译]"标记
+### 快捷键触发模式
+1. 在输入过程中，使用方向键或数字键选中需要翻译的候选词
+2. 按下 `Ctrl+Y` 快捷键
+3. 翻译结果将显示在候选词列表的首位，前缀标记为 `[译]`
 
-例如，输入 `你好''` 后，候选词列表将显示：
-1. `Hello [译]`
-2. `你好`
-3. （其他候选词...）
+### 后缀触发模式
+1. 在输入过程中，输入两个单引号 `''`
+2. 系统会自动翻译**第一个**候选词
+3. 翻译结果将显示在候选词列表的首位，前缀标记为 `[译]`
 
 ## 配置说明
 
@@ -57,8 +69,8 @@ engine:
 ```lua
 -- 翻译API配置
 local config = {
-    -- 选择使用的翻译API: "google", "deepl", "microsoft", "deeplx", "niutrans", "youdao", "baidu" 
-    default_api = "niutrans",
+    -- 选择使用的翻译API: "google", "deepl", "microsoft", "niutrans", "youdao", "baidu" 
+    default_api = "google",
     
     -- API密钥配置
     api_keys = {
@@ -80,8 +92,6 @@ local config = {
 }
 ```
 
-> 默认翻译第一个候选词，可自行修改
-
 ### 设置默认翻译 API
 
 修改 `default_api` 参数的值，可选项有：
@@ -89,30 +99,22 @@ local config = {
 - `deepl` - DeepL 翻译（需要 API 密钥）
 - `microsoft` - Microsoft 翻译（需要 API 密钥）
 - `niutrans` - 小牛云翻译（需要 API 密钥）
-- `youdao` - 有道翻译
-- `baidu` - 百度翻译
+- `youdao` - 有道翻译（需要 API 密钥）
+- `baidu` - 百度翻译（需要 API 密钥）
 
 ### 配置 API 密钥
 
-如果您选择使用需要 API 密钥的翻译服务，需要在配置中填写相应的 API 密钥。
+如果您选择使用需要 API 密钥的翻译服务，需要在配置中填写相应的 API 密钥。请参考各翻译服务提供商的官方文档获取 API 密钥。
 
-### ~~DeepLX 配置~~
+## 调试功能
 
-~~DeepLX 是一个开源的 DeepL API 代理，可以免费使用。如果您选择使用 DeepLX，需要配置服务器地址：~~
-
-~~如果服务器需要认证，还需要设置令牌：~~
-
-## 调试
-
-在`lua/log.lua` 下给出了日志调试功能。
-
-用法：
+插件提供了完整的日志功能，可以帮助您排查问题：
 
 ```lua
 -- 日志文件保存位置
--- windows %APPDATA%\rime
--- linux  HOME/.config/rime
-local log = require("log")  -- 引入log日志
+-- Windows: %APPDATA%\rime\test-debug.log
+-- Linux/macOS: HOME/.config/rime/test-debug.log
+local log = require("log")
 
 log.info("输出信息……")
 log.error("输出错误信息……")
@@ -121,18 +123,23 @@ log.error("输出错误信息……")
 如果翻译功能不工作，请检查以下几点：
 
 1. 确保您的网络连接正常
-3. 如果使用需要 API 密钥的翻译服务，确保 API 密钥正确
+2. 如果使用需要 API 密钥的翻译服务，确保 API 密钥正确配置
+3. 查看日志文件中是否有错误信息
 4. 重新部署 Rime 输入法
 
 ## 注意事项
 
-1. Google 翻译不需要 API 密钥，可以直接使用
-2. 其他翻译 API 需要配置相应的 API 密钥或服务器地址
+1. Google 翻译不需要 API 密钥，可以直接使用，但可能受到网络环境限制
+2. 其他翻译 API 需要配置相应的 API 密钥
 3. 翻译功能需要网络连接
 4. 翻译结果的质量取决于所使用的翻译 API
+5. 百度翻译 API 可能需要特定的网络环境才能正常工作
 
 ## 致谢
 
-- [rime输入法实现候选词翻译](https://github.com/MrStrangerYang/simonLua)
+- [rime输入法实现候选词翻译](https://github.com/MrStrangerYang/simonLua) - 提供了最初的实现思路
+- [librime-cloud](https://github.com/hchunhui/librime-cloud) - RIME 云输入插件（词云联想）
+- [@Jormungand-x](https://github.com/Jormungand-x)
+## 许可证
 
-- [librime-cloud: RIME 云输入插件](https://github.com/hchunhui/librime-cloud)（词云联想）
+本项目遵循开源协议，欢迎贡献和改进。

@@ -1,4 +1,10 @@
-local log = require("log")
+-- 设置 Lua 模块搜索路径
+local lua_dir = rime_user_path .. "/lua"
+lua_dir = rime_api.get_user_data_dir():gsub("\\", "/") .. "/lua/"
+
+package.cpath = package.cpath .. ";" .. lua_dir .. "?.dll;" .. lua_dir .. "?.so"
+
+-- local log = require("log")
 local http = require("simplehttp")
 -- 全局 HTTP 超时（秒），避免网络不通时卡住引擎线程
 http.TIMEOUT = 5 
@@ -7,9 +13,8 @@ local sha = require("sha2")
 
 -- 翻译API配置
 local config = {
-    -- 选择使用的翻译API: "google", "deepl", "microsoft", "deeplx", "niutrans", "youdao", "baidu" 
-    -- 百度翻译暂时不可用，请勿使用
-    default_api = "google",
+    -- 选择使用的翻译API: "google", "deepl", "microsoft", "deeplx", "niutrans", "youdao", "baidu", "openai"
+    default_api = "openai",
 
     -- API密钥配置
     api_keys = {
@@ -26,6 +31,15 @@ local config = {
         baidu = {
             app_id = "YOUR_BAIDU_APP_ID", -- 百度翻译应用ID
             app_key = "YOUR_BAIDU_APP_KEY" -- 百度翻译应用密钥
+        },
+        openai = {
+            -- 智谱：https://open.bigmodel.cn/api/paas/v4/chat/completions
+            -- DeepSeek：https://api.deepseek.com/chat/completions
+            -- 硅基流动：https://api.siliconflow.com/v1/chat/completions
+            -- OpenAI官方：https://api.openai.com/v1/completions 
+            base_url = "",  -- API请求链接，符合OpenAI规范的都可以，如上示例所示
+            api_key = "", -- API密钥，到平台自行申请
+            model = "" -- 模型型号，根据对应平台的型号填写
         }
     }
 }
@@ -43,17 +57,101 @@ local function url_encode(str)
     return str
 end
 
+-- OpenAI兼容翻译API
+local function openai(text)
+    local openai_config = config.api_keys.openai
+    local api_key = openai_config.api_key
+    local base_url = openai_config.base_url
+    local model = openai_config.model
+    
+    if not api_key or api_key == "" then
+        log.warning("OpenAI API密钥未配置")
+        return nil
+    end
+    
+    if not base_url or base_url == "" then
+        log.warning("OpenAI API链接未配置")
+        return nil
+    end
+    
+    -- 构建系统提示词，用于中译英
+    local system_prompt = "你是一个专业的翻译助手。请将用户输入的中文内容翻译成英文。只输出翻译结果，不要添加任何解释或额外内容。"
+    
+    local body = json.encode({
+        model = model,
+        messages = {
+            {
+                role = "system",
+                content = system_prompt
+            },
+            {
+                role = "user",
+                content = text
+            }
+        },
+        max_tokens = 4096,
+        temperature = 1.3,
+        top_p = 0.1,
+        stream = false
+    })
+    
+    local headers = {
+        ["Authorization"] = "Bearer " .. api_key,
+        ["Content-Type"] = "application/json"
+    }
+    
+    log.warning("OpenAI翻译请求URL: " .. base_url)
+    log.warning("OpenAI翻译模型: " .. model)
+    
+    local request = {
+        url = base_url,
+        method = "POST",
+        headers = headers,
+        data = body
+    }
+
+    local reply = http.request(request)
+    
+    if not reply or reply == "" then
+        log.warning("OpenAI翻译收到空响应")
+        return nil
+    end
+    
+    log.warning("OpenAI翻译响应: " .. reply)
+    
+    local success, j = pcall(json.decode, reply)
+    if not success then
+        log.warning("OpenAI翻译JSON解析失败: " .. tostring(j))
+        return nil
+    end
+    
+    if j and j.error then
+        local error_msg = j.error.message or j.error.code or "未知错误"
+        log.warning("OpenAI翻译错误: " .. error_msg)
+        return nil
+    end
+    
+    if j and j.choices and j.choices[1] and j.choices[1].message and j.choices[1].message.content then
+        local translated_text = j.choices[1].message.content:gsub("^%s+", ""):gsub("%s+$", "")
+        log.warning("OpenAI翻译结果: " .. translated_text)
+        return translated_text
+    end
+    
+    log.warning("OpenAI翻译未找到有效结果")
+    return nil
+end
+
 -- Google翻译API
 local function google(text)
     local encoded_text = url_encode(text)
     local url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=en&dt=t&dt=bd&dt=rm&dt=qca&dt=at&dt=ss&dt=md&dt=ld&dt=ex&dj=1&q=" .. encoded_text
     
-    log.info("google start: " .. url)
+    log.warning("google start: " .. url)
     local t0 = os.time()
     local reply = http.request(url)
     local dt = os.difftime(os.time(), t0)
     local rlen = reply and #reply or -1
-    log.info(string.format("google done: len=%d dt=%ds", rlen, dt))
+    log.warning(string.format("google done: len=%d dt=%ds", rlen, dt))
     local success, j = pcall(json.decode, reply)
     
     if success and j then
@@ -222,7 +320,7 @@ local function youdao(text)
     local app_key = config.api_keys.youdao.app_key
     
     if not app_id or not app_key then
-        log.error("有道API密钥未配置")
+        log.warning("有道API密钥未配置")
         return nil
     end
     
@@ -249,8 +347,8 @@ local function youdao(text)
         ["Content-Type"] = "application/x-www-form-urlencoded"
     }
     
-    log.info("有道翻译请求URL: " .. url)
-    log.info("有道翻译请求体: " .. body)
+    log.warning("有道翻译请求URL: " .. url)
+    log.warning("有道翻译请求体: " .. body)
     
     local reply = http.request{
         url = url,
@@ -260,26 +358,26 @@ local function youdao(text)
     }
     
     if not reply or reply == "" then
-        log.error("有道翻译收到空响应")
+        log.warning("有道翻译收到空响应")
         return nil
     end
     
-    log.info("有道翻译响应: " .. reply)
+    log.warning("有道翻译响应: " .. reply)
     
     local success, j = pcall(json.decode, reply)
     if not success then
-        log.error("有道翻译JSON解析失败: " .. tostring(j))
+        log.warning("有道翻译JSON解析失败: " .. tostring(j))
         return nil
     end
     
     if j and j.translation and j.translation[1] then
-        log.info("有道翻译结果: " .. tostring(j.translation[1]))
+        log.warning("有道翻译结果: " .. tostring(j.translation[1]))
         return j.translation[1]
     elseif j and j.basic and j.basic.explains and j.basic.explains[1] then
-        log.info("有道翻译basic.explains: " .. tostring(j.basic.explains[1]))
+        log.warning("有道翻译basic.explains: " .. tostring(j.basic.explains[1]))
         return j.basic.explains[1]
     else
-        log.error("有道翻译未找到有效结果")
+        log.warning("有道翻译未找到有效结果")
         return nil
     end
 end
@@ -290,7 +388,7 @@ local function baidu(text)
     local app_key = config.api_keys.baidu.app_key
     
     if not app_id or not app_key then
-        log.error("百度API密钥未配置")
+        log.warning("百度API密钥未配置")
         return nil
     end
     
@@ -308,8 +406,8 @@ local function baidu(text)
         ["Content-Type"] = "application/x-www-form-urlencoded"
     }
     
-    log.info("百度翻译请求URL: " .. url)
-    log.info("百度翻译请求体: " .. body)
+    log.warning("百度翻译请求URL: " .. url)
+    log.warning("百度翻译请求体: " .. body)
     
     local reply = http.request{
         url = url,
@@ -319,23 +417,23 @@ local function baidu(text)
     }
     
     if not reply or reply == "" then
-        log.error("百度翻译收到空响应")
+        log.warning("百度翻译收到空响应")
         return nil
     end
     
-    log.info("百度翻译响应: " .. reply)
+    log.warning("百度翻译响应: " .. reply)
     
     local success, j = pcall(json.decode, reply)
     if not success then
-        log.error("百度翻译JSON解析失败: " .. tostring(j))
+        log.warning("百度翻译JSON解析失败: " .. tostring(j))
         return nil
     end
     
     if j and j.trans_result and j.trans_result[1] and j.trans_result[1].dst then
-        log.info("百度翻译结果: " .. tostring(j.trans_result[1].dst))
+        log.warning("百度翻译结果: " .. tostring(j.trans_result[1].dst))
         return j.trans_result[1].dst
     else
-        log.error("百度翻译未找到有效结果")
+        log.warning("百度翻译未找到有效结果")
         return nil
     end
 end
@@ -348,5 +446,6 @@ return {
     niutrans = niutrans,
     youdao = youdao,
     baidu = baidu,
+    openai = openai,
     config = config
 }

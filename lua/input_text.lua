@@ -1,5 +1,5 @@
 local translation = require("trans-all")
-local log = require("log")
+-- local log = require("log")
 
 local function trans(text)
     local result
@@ -16,6 +16,8 @@ local function trans(text)
         result = translation.youdao(text)
     elseif translation.config.default_api == "baidu" then
         result = translation.baidu(text)
+    elseif translation.config.default_api == "openai" then
+        result = translation.openai(text)
     else
         result = translation.google(text)
     end
